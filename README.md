@@ -76,6 +76,10 @@ curl -v http://$fdfqdn/ --resolve $fdfqdn:80:$fdip # expect 200 ok
 az group delete -n $prefix --yes --no-wait 
 ~~~
 
+### NOTE:
+If you like to see one for Azure Container Apps have a look here:
+https://github.com/sebafo/frontdoor-container-apps
+
 ## Frontdoor and Traffic Manager Demo
 
 ~~~ bash
