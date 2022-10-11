@@ -2,10 +2,22 @@
 
 ## Frontdoor and Private Link
 
+Setup Azure Frontdoor with Private Link and Internal Loadbalancer:
+~~~ mermaid
+classDiagram
+AzFrontdoor --> PrivateLinkService
+PrivateLinkService --> StandardLB
+StandardLB --> VM
+AzFrontdoor: www.cptdazfd.org
+StandardLB: FEIP 10.0.0.5
+VM: IP 10.0.0.4
+PrivateLinkService: 10.0.0.6
+~~~
+
 ### Setup Env:
 
 ~~~ bash
-prefix=cptdazfd2
+prefix=cptdazfd
 location=eastus
 myip=$(curl ifconfig.io) # Just in case we like to whitelist our own ip.
 myobjectid=$(az ad user list --query '[?displayName==`ga`].id' -o tsv) 
@@ -61,7 +73,7 @@ curl -v http://$fdfqdn/ --resolve $fdfqdn:80:$fdip # expect 200 ok
 
 ### Clean up
 ~~~ bash
-az group delete -n $prefix --yes
+az group delete -n $prefix --yes --no-wait 
 ~~~
 
 ## Frontdoor and Traffic Manager Demo
@@ -280,6 +292,7 @@ https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/micr
 ~~~ bash
 gh repo create $prefix --public
 git init
+git remote remove origin
 git remote add origin https://github.com/cpinotossi/$prefix.git
 git submodule add https://github.com/cpinotossi/azbicep
 git submodule init
@@ -288,10 +301,14 @@ git submodule update --init
 git status
 git add .gitignore
 git add *
-git commit -m"init"
+git commit -m"azure frontdoor private link demo update cptdazfd"
 git push origin main
 git push --recurse-submodules=on-demand
 git rm README.md # unstage
 git --help
 git config advice.addIgnoredFile false
+git pull origin main
+git merge 
+origin main
+git config pull.rebase false
 ~~~
