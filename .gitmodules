@@ -1,0 +1,3 @@
+[submodule "azbicep"]
+	path = azbicep
+	url = https://github.com/cpinotossi/azbicep
