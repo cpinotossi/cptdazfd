@@ -25,11 +25,11 @@ myobjectid=$(az ad user list --query '[?displayName==`ga`].id' -o tsv)
 # az group delete -n $prefix --yes
 az group create -n $prefix -l $location
 # Create base components
-az deployment group create -n ${prefix}-base -g $prefix --mode incremental --template-file deploy2base.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
+az deployment group create -n ${prefix}-base -g $prefix --mode incremental --template-file deploybase.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
 # Add vm to lb backend pool
 az network nic ip-config address-pool add --address-pool $prefix --ip-config-name $prefix --nic-name $prefix -g $prefix --lb-name $prefix
 # Add AFD
-az deployment group create -n ${prefix}-afd -g $prefix --mode incremental --template-file deploy2afd.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
+az deployment group create -n ${prefix}-afd -g $prefix --mode incremental --template-file deployafd.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
 ## Approve Private Link Service
 plsid=$(az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query sharedPrivateLinkResource.privateLink.id -o tsv)
 pecid=$(az network private-endpoint-connection list  --id $plsid --query [0].id -o tsv)
@@ -38,12 +38,17 @@ az network private-endpoint-connection approve -d $prefix --id $pecid
 
 ### Verify setup:
 ~~~ bash
-az network lb show -n $prefix -g $prefix --query frontendIpConfigurations[0].privateIpAddress -o tsv # expect 10.0.0.5
+# proof we are using only privat ipw with our lb
+az network lb show -n $prefix -g $prefix --query frontendIPConfigurations[0].privateIPAddress -o tsv # expect 10.0.0.5
+# what is the ip of our private link service?
 az network private-link-service show -n $prefix -g $prefix --query ipConfigurations[0].privateIpAddress # expect 10.0.0.6
-az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query "{hostName:hostName, originHostHeader:originHostHeader, privateLink:sharedPrivateLinkResource.privateLink.id}"
+# Get details about our AFD profile
+az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query "{hostName:hostName, originHostHeader:originHostHeader, privateLink:sharedPrivateLinkResource.privateLink.id}" | sed -e "s#subscriptions\/.*\/resourceGroups#rg#"
 ~~~
 
-### Test:
+### Test1:
+Start a server which will be used finally by AFD.
+
 ~~~ bash
 # chmod does not work straight away at WSL.
 ls -la azbicep/ssh/chpinoto.key # should be -rwxrwxrwx
@@ -60,16 +65,40 @@ sudo apt install apache2-utils # install apache benchmark
 mkdir www
 cd www
 echo "hello world" > index.html
+echo "hello azure" > azure.html
 python -m SimpleHTTPServer 9000 &
+~~~
 
+### Test2:
+Send request to AFD
+
+~~~ bash
 # Open new terminal
 prefix=cptdazfd #you need to set the ENV var again
 # retrieve AFD FQDN
 fdfqdn=$(az afd endpoint show --endpoint-name $prefix --profile-name $prefix -g $prefix --query hostName -o tsv)
+echo $fdfqdn
 # retrieve AFD Edge PoP IP
 fdip=$(dig $fdfqdn +short | tail -n1)
-curl -v http://$fdfqdn/ --resolve $fdfqdn:80:$fdip # expect 200 ok
+echo $fdip
+curl http://$fdfqdn/azure.html # expect 200 ok
+curl -v -H"X-Azure-DebugInfo: 1" http://$fdfqdn/azure.html # expect 200 ok
+curl -v -H"X-Azure-DebugInfo: 1" http://$fdfqdn/azure.html --resolve $fdfqdn:80:$fdip # expect 200 ok
+# This can be only tested if you did modify resources accordently via the azure portal
+
+dig cptdazfd.cptdev.com
+traceroute cptdazfd.cptdev.com
+curl ipinfo.io/$fdip
+whois 
+curl -v -H"X-Azure-DebugInfo: 1" http://cptdazfd.cptdev.com/azure.html # expect 200 ok
 ~~~
+
+- X-Azure-OriginStatusCode
+ - This header contains the HTTP status code returned by the backend. Using this header you can identify the HTTP status code returned by the application running in your backend without going through backend logs. This status code might be different from the HTTP status code in the response sent to the client by Front Door. This header allows you to determine if the backend is misbehaving or if the issue is with the Front Door service.
+- X-Azure-InternalError	This header will contain the error code that Front Door comes across when processing the request. This error indicates the issue is  internal to the Front Door service/infrastructure. Report issue to support.
+- X-Azure-ExternalError	
+ - X-Azure-ExternalError: 0x830c1011, The certificate authority is unfamiliar.
+ - This header shows the error code that Front Door servers come across while establishing connectivity to the backend server to process a request. This header will help identify issues in the connection between Front Door and the backend application. This header will include a detailed error message to help you identify connectivity issues to your backend (for example, DNS resolution, invalid cert, and so on.).
 
 ### Clean up
 ~~~ bash
@@ -77,8 +106,8 @@ az group delete -n $prefix --yes --no-wait
 ~~~
 
 ### NOTE:
-If you like to see one for Azure Container Apps have a look here:
-https://github.com/sebafo/frontdoor-container-apps
+(Azure FD and SSL Certificate)[https://github.com/brwilkinson/AzureDeploymentFramework/blob/73df5f8f1dfc32415ca6d5051512edb7348a52b6/ADF/bicep/FD-frontDoor.bicep#L167]
+- (Azure FD, Private Link and Container Apps)[https://github.com/sebafo/frontdoor-container-apps]
 
 ## Frontdoor and Traffic Manager Demo
 
@@ -126,7 +155,7 @@ az network front-door routing-rule show -f $prefix -g $rg -n ${prefix}routing --
 
 > TODO: Need to figure out how to get this done already during the first deployment instead of having to call azure cli afterwards.
 
-## Test
+### Test
 
 RuleEngine is setup as follow.
 
@@ -173,7 +202,7 @@ In case you receive 503 Service Unavailable, this could be because one of the th
 > TODO: Need to consider to replace the vm based backend through azure kubernetes services.
 
 
-## Clean up
+### Clean up
 
 Delete DNS entries first. 
 
@@ -246,7 +275,6 @@ curl -v https://red.cptdev.com/
 curl -v -H"X-Azure-DebugInfo: 1" http://red.cptdev.com/
 ~~~
 
-
 ## Misc
 
 ### Git hints 
@@ -291,6 +319,22 @@ https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/micr
 
 
 ## MISC
+
+### change chmod at wsl
+Based on 
+- https://stackoverflow.com/questions/46610256/chmod-wsl-bash-doesnt-work
+- https://devblogs.microsoft.com/commandline/automatically-configuring-wsl/
+~~~bash
+sudo cat /etc/wsl.conf
+sudo touch /etc/wsl.conf
+sudo nano /etc/wsl.conf
+~~~
+
+Add
+~~~ text
+[automount]
+options = "metadata"
+~~~
 
 ### github
 ~~~ bash
