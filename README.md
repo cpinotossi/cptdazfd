@@ -17,6 +17,7 @@ PrivateLinkService: 10.0.0.6
 ### Setup Env:
 
 ~~~ bash
+# Define some env variables
 prefix=cptdazfd
 location=eastus
 myip=$(curl ifconfig.io) # Just in case we like to whitelist our own ip.
@@ -36,61 +37,61 @@ pecid=$(az network private-endpoint-connection list  --id $plsid --query [0].id 
 az network private-endpoint-connection approve -d $prefix --id $pecid
 ~~~
 
-### Verify setup:
+### Verify setup
+
 ~~~ bash
-# proof we are using only privat ipw with our lb
-az network lb show -n $prefix -g $prefix --query frontendIPConfigurations[0].privateIPAddress -o tsv # expect 10.0.0.5
+az vm list-ip-addresses -g $prefix -n $prefix -o table
+# proof we are using only privat ips with our lb
+az network lb show -n $prefix -g $prefix --query frontendIPConfigurations[].privateIPAddress -o table # expect 10.0.0.5
 # what is the ip of our private link service?
-az network private-link-service show -n $prefix -g $prefix --query ipConfigurations[0].privateIpAddress # expect 10.0.0.6
+az network private-link-service show -n $prefix -g $prefix --query ipConfigurations[].privateIpAddress # expect 10.0.0.6
 # Get details about our AFD profile
 az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query "{hostName:hostName, originHostHeader:originHostHeader, privateLink:sharedPrivateLinkResource.privateLink.id}" | sed -e "s#subscriptions\/.*\/resourceGroups#rg#"
 ~~~
 
-### Test1:
-Start a server which will be used finally by AFD.
+### Setup Web Server at VM
 
 ~~~ bash
-# chmod does not work straight away at WSL.
-ls -la azbicep/ssh/chpinoto.key # should be -rwxrwxrwx
-sudo chmod 600 azbicep/ssh/chpinoto.key
-ls -la azbicep/ssh/chpinoto.key # should be -rw------- now
-
 # ssh into vm
 vmid=$(az vm show -g $prefix -n $prefix --query id -o tsv)
-az network bastion ssh -n $prefix -g $prefix --target-resource-id $vmid --auth-type ssh-key --username chpinoto --ssh-key azbicep/ssh/chpinoto.key
-demo!pass123
-sudo apt install apache2-utils # install apache benchmark
-
+az network bastion ssh -n cptdazbastion -g cptdazbastion --target-resource-id $vmid --auth-type AAD
 # Create web server
 mkdir www
 cd www
 echo "hello world" > index.html
 echo "hello azure" > azure.html
+python -m SimpleHTTPServer 9000
 python -m SimpleHTTPServer 9000 &
 ~~~
 
-### Test2:
-Send request to AFD
+### Test
+
+Open new terminal
 
 ~~~ bash
-# Open new terminal
 prefix=cptdazfd #you need to set the ENV var again
+
 # retrieve AFD FQDN
 fdfqdn=$(az afd endpoint show --endpoint-name $prefix --profile-name $prefix -g $prefix --query hostName -o tsv)
 echo $fdfqdn
+# retrieve AFD custom domains
+fdcd0=$(az afd custom-domain list -g $prefix --profile-name $prefix --query [0].hostName -o tsv)
+echo $fdcd0
+fdcd1=$(az afd custom-domain list -g $prefix --profile-name $prefix --query [1].hostName -o tsv)
+echo $fdcd1
+
+curl -v  https://$fdfqdn/azure.html # expect 200 ok
+curl -v  https://$fdcd0/azure.html # expect 200 ok
+curl -v -H"X-Azure-DebugInfo: 1" https://$fdcd0/azure.html # expect 200 ok
+
 # retrieve AFD Edge PoP IP
 fdip=$(dig $fdfqdn +short | tail -n1)
 echo $fdip
-curl http://$fdfqdn/azure.html # expect 200 ok
-curl -v -H"X-Azure-DebugInfo: 1" http://$fdfqdn/azure.html # expect 200 ok
-curl -v -H"X-Azure-DebugInfo: 1" http://$fdfqdn/azure.html --resolve $fdfqdn:80:$fdip # expect 200 ok
-# This can be only tested if you did modify resources accordently via the azure portal
+
 
 dig cptdazfd.cptdev.com
 traceroute cptdazfd.cptdev.com
 curl ipinfo.io/$fdip
-whois 
-curl -v -H"X-Azure-DebugInfo: 1" http://cptdazfd.cptdev.com/azure.html # expect 200 ok
 ~~~
 
 - X-Azure-OriginStatusCode
@@ -223,63 +224,77 @@ Delete the azure front door setup.
 az group delete -n $rg -y
 ~~~
 
-## AFD Premium and Private Link
+### TODO
 
-Create resources
+Get it done with resource script instead like here:
+https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/microsoft.storage/storage-static-website/scripts/enable-static-website.ps1
 
-~~~ bash
-prefix=cptdafd
-domain=cptdev.com
-myobjectid=$(az ad user list --query '[?displayName==`ga`].objectId' -o tsv)
-myip=$(curl ifconfig.io)
-dnszoneid=$(az network dns zone list -g ga-rg --query '[?name==`cptdev.com`].id' -o tsv)
-az group create -n $prefix -l eastus
-az deployment group create -n create -g $prefix --template-file bicep/deployprem.bicep -p myobjectid=$myobjectid myip=$myip domain=$domain dnszoneid=$dnszoneid prefix=$prefix
-lbap=$(az network lb address-pool show -g $prefix --lb-name $prefix -n ${prefix}red --query id -o tsv)
-az network nic ip-config update -g $prefix -n ${prefix}red --nic-name ${prefix}red --lb-address-pools $lbap --lb-name $prefix
+[Bicep Script Resource](https://docs.microsoft.com/en-us/azure/templates/microsoft.resources/deploymentscripts?tabs=bicep)
+
+
+## MISC
+
+### curl
+
+~~~bash
+# dns spoofing via curl
+curl -v -H"X-Azure-DebugInfo: 1" http://$fdfqdn/azure.html --resolve $fdfqdn:80:$fdip # expect 200 ok
 ~~~
 
-Test vm from public internet.
-
-~~~ bash
-# verify which NIC has an public IP.
-az network nic list -g $prefix  --query '[].ipConfigurations[].{name:name,publicIpAddress:publicIpAddress.id}'
-# test vm with public IP.
-vmbluefqdn=$(az network public-ip show -g $prefix -n ${prefix}blue --query dnsSettings.fqdn -o tsv)
-curl -v http://$vmbluefqdn/
-curl -k -v https://$vmbluefqdn/
+### wsl time sync
+~~~bash
+sudo hwclock -s
+sudo ntpdate time.windows.com
 ~~~
 
-Test from local vm via bastion host.
+### change chmod at wsl
 
-~~~ pwsh
-$prefix="cptdafd"
-$vmidred=az vm show -g $prefix -n ${prefix}red --query id -o tsv
-az network bastion ssh -n ${prefix}bastion -g $prefix --target-resource-id $vmidred --auth-type "AAD"
+Based on 
+- https://stackoverflow.com/questions/46610256/chmod-wsl-bash-doesnt-work
+- https://devblogs.microsoft.com/commandline/automatically-configuring-wsl/
 
-$vmidblue=az vm show -g $prefix -n ${prefix}blue --query id -o tsv
-az network bastion ssh -n ${prefix}bastion -g $prefix --target-resource-id $vmidblue --auth-type "AAD"
+~~~bash
+sudo cat /etc/wsl.conf
+sudo touch /etc/wsl.conf
+sudo nano /etc/wsl.conf
 ~~~
 
-Test with AFD
-
-~~~ bash
-dig cptdafd.blob.core.windows.net
-curl -v https://cptdafd.blob.core.windows.net/web/test.txt # Request content direct via blob.
-curl -v -H"X-Azure-DebugInfo: 1" https://blue.cptdev.com/ # Test blue server via AFD (TCP_HIT)
-curl -v -H"X-Azure-DebugInfo: 1" https://blue.cptdev.com/?test=1 # Force TCP_MISS via cache key blue server via AFD
-curl -v -H"X-Azure-DebugInfo: 1" https://blue.cptdev.com/test.gif # CONFIG_NOCACHE via rule blue server via AFD
-curl -v -H"X-Azure-DebugInfo: 1" https://blue.cptdev.com/blob/web/test.txt # Test AFD rules to blob storage
-
-curl -v https://red.cptdev.com/
-curl -v -H"X-Azure-DebugInfo: 1" http://red.cptdev.com/
-~~~
-
-## Misc
-
-### Git hints 
-
+Add
 ~~~ text
+[automount]
+options = "metadata"
+~~~
+
+~~~bash
+# chmod does not work straight away at WSL.
+ls -la azbicep/ssh/chpinoto.key # should be -rwxrwxrwx
+sudo chmod 600 azbicep/ssh/chpinoto.key
+ls -la azbicep/ssh/chpinoto.key # should be -rw------- now
+~~~
+
+### github
+~~~ bash
+gh repo create $prefix --public
+git init
+git remote remove origin
+git remote add origin https://github.com/cpinotossi/$prefix.git
+git submodule add https://github.com/cpinotossi/azbicep
+git submodule init
+git submodule update
+git submodule update --init
+git status
+git add .gitignore
+git add *
+git commit -m"azure frontdoor private link demo update cptdazfd"
+git push origin main
+git push --recurse-submodules=on-demand
+git rm README.md # unstage
+git --help
+git config advice.addIgnoredFile false
+git pull origin main
+git merge 
+origin main
+git config pull.rebase false
 git init
 gh repo create cptdafd --public
 git remote add origin https://github.com/cpinotossi/cptdafd.git
@@ -308,55 +323,4 @@ git push origin v1
 git tag -l
 git fetch --tags
 git clone -b <git-tagname> <repository-url> 
-~~~
-
-## TODO
-
-Get it done with resource script instead like here:
-https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/microsoft.storage/storage-static-website/scripts/enable-static-website.ps1
-
-[Bicep Script Resource](https://docs.microsoft.com/en-us/azure/templates/microsoft.resources/deploymentscripts?tabs=bicep)
-
-
-## MISC
-
-### change chmod at wsl
-Based on 
-- https://stackoverflow.com/questions/46610256/chmod-wsl-bash-doesnt-work
-- https://devblogs.microsoft.com/commandline/automatically-configuring-wsl/
-~~~bash
-sudo cat /etc/wsl.conf
-sudo touch /etc/wsl.conf
-sudo nano /etc/wsl.conf
-~~~
-
-Add
-~~~ text
-[automount]
-options = "metadata"
-~~~
-
-### github
-~~~ bash
-gh repo create $prefix --public
-git init
-git remote remove origin
-git remote add origin https://github.com/cpinotossi/$prefix.git
-git submodule add https://github.com/cpinotossi/azbicep
-git submodule init
-git submodule update
-git submodule update --init
-git status
-git add .gitignore
-git add *
-git commit -m"azure frontdoor private link demo update cptdazfd"
-git push origin main
-git push --recurse-submodules=on-demand
-git rm README.md # unstage
-git --help
-git config advice.addIgnoredFile false
-git pull origin main
-git merge 
-origin main
-git config pull.rebase false
 ~~~
