@@ -289,6 +289,7 @@ gh repo create $prefix --public
 git init
 git remote remove origin
 git remote add origin https://github.com/cpinotossi/$prefix.git
+git remote
 git submodule add https://github.com/cpinotossi/azbicep
 git submodule init
 git submodule update
