@@ -17,6 +17,8 @@ PrivateLinkService: 10.0.0.6
 ### Setup Env:
 
 ~~~ bash
+sudo hwclock -s
+sudo ntpdate time.windows.com
 # Define some env variables
 prefix=cptdazfd
 location=eastus
@@ -54,7 +56,7 @@ az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-n
 ~~~ bash
 # ssh into vm
 vmid=$(az vm show -g $prefix -n $prefix --query id -o tsv)
-az network bastion ssh -n cptdazbastion -g cptdazbastion --target-resource-id $vmid --auth-type AAD
+az network bastion ssh -n $prefix -g $prefix --target-resource-id $vmid --auth-type AAD
 # Create web server
 mkdir www
 cd www
@@ -80,8 +82,9 @@ echo $fdcd0
 fdcd1=$(az afd custom-domain list -g $prefix --profile-name $prefix --query [1].hostName -o tsv)
 echo $fdcd1
 
-curl -v  https://$fdfqdn/azure.html # expect 200 ok
-curl -v  https://$fdcd0/azure.html # expect 200 ok
+curl -v -k https://$fdfqdn/index.html # expect 200 ok
+curl -v -k https://$fdfqdn/azure.html # expect 200 ok
+curl -v -k https://$fdcd0/azure.html # expect 200 ok
 curl -v -H"X-Azure-DebugInfo: 1" https://$fdcd0/azure.html # expect 200 ok
 
 # retrieve AFD Edge PoP IP
@@ -92,6 +95,14 @@ echo $fdip
 dig cptdazfd.cptdev.com
 traceroute cptdazfd.cptdev.com
 curl ipinfo.io/$fdip
+
+curl https://cptdazfd.cptdev.com/index.html
+curl https://cptdazfd-cfgzcvcdh9bzbdfv.z01.azurefd.net/azure.html
+curl -v "https://cptdazfd-cfgzcvcdh9bzbdfv.z01.azurefd.net/azure.html?cache"
+curl -v http://cptdev.com/azure.html
+
+dig cptdazfd-cfgzcvcdh9bzbdfv.z01.azurefd.net
+dig cptdev.com
 ~~~
 
 - X-Azure-OriginStatusCode
