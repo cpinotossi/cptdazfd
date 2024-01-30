@@ -2,15 +2,16 @@ targetScope = 'resourceGroup'
 
 //var parameters = json(loadTextContent('parameters.json'))
 param location string
-param username string = 'chpinoto'
-var password = 'demo!pass123'
+param username string
+@secure()
+param password string
 param prefix string
 param myobjectid string
 param myip string
-var vmip = '10.0.0.4'
-var cidervnet = '10.0.0.0/16'
-var cidersubnet = '10.0.0.0/24'
-var ciderbastion = '10.0.1.0/24'
+param vmip string
+param cidervnet string
+param cidersubnet string
+param ciderbastion string
 
 resource vnet 'Microsoft.Network/virtualNetworks@2021-03-01' = {
   name: prefix

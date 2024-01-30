@@ -4,41 +4,26 @@
 
 ~~~bash
 # Define some env variables
-prefix=cptdazfd
-location=eastus
+prefix=cptdazfd2
+location=germanywestcentral
 myip=$(curl ifconfig.io) # Just in case we like to whitelist our own ip.
-myobjectid=$(az ad user list --query '[?displayName==`ga`].id' -o tsv) 
+currentUserObjectId=$(az ad signed-in-user show --query id -o tsv)
 # az group delete -n $prefix --yes
 az group create -n $prefix -l $location
 # Create base components
-az deployment group create -n ${prefix}-base -g $prefix --mode incremental --template-file deploybase.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
+az deployment sub create -n ${prefix}-base -l $location --template-file main.bicep
+curl -v https://blob.cptdev.com/cptdazfd/test.txt
+curl -v https://blob.cptdev.com/cptdazfd/test.txt?test=1
+curl -v -H"X-Azure-DebugInfo: 1" https://blob.cptdev.com/cptdazfd/test.txt
+
+az afd profile show -g $prefix --profile-name  afdProfile1
+ --query id -o tsv
+
+az afd endpoint show -g $prefix --profile-name afdProfile1 --endpoint-name afdEndpointBlob --query hostName -o tsv
+
+az afd custom-domain show --custom-domain-name afdCustomDomainBlob -g $prefix --profile-name afdProfile1 --query validationProperties.validationToken -o tsv
+
 ~~~
-
-### Test
-
-~~~ bash
-# ssh into vm
-vmid=$(az vm show -g $prefix -n $prefix --query id -o tsv)
-az network bastion ssh -n $prefix -g $prefix --target-resource-id $vmid --auth-type AAD
-# Check if webserver is running on port 9000
-sudo netstat -tuln | grep ':9000'
-# Create web server
-mkdir www
-cd www
-echo "hello world" > index.html
-echo "hello azure" > azure.html
-# Start web server in background
-nohup python -m SimpleHTTPServer 9000 > log.txt 2>&1 &
-# verify logs
-tail log.txt
-curl http://localhost:9000
-curl http://10.0.0.5/azure.html
-ping 10.0.0.5
-# kill prozess
-sudo kill -9 `sudo lsof -t -i:9000`
-nohup --help
-~~~
-
 
 ## Frontdoor and Private Link
 
@@ -104,6 +89,17 @@ echo "hello world" > index.html
 echo "hello azure" > azure.html
 python -m SimpleHTTPServer 9000
 python -m SimpleHTTPServer 9000 &
+
+# Optional: Start web server in background
+nohup python -m SimpleHTTPServer 9000 > log.txt 2>&1 &
+# verify logs
+tail log.txt
+curl http://localhost:9000
+curl http://10.0.0.5/azure.html
+ping 10.0.0.5
+# kill prozess
+sudo kill -9 `sudo lsof -t -i:9000`
+nohup --help
 ~~~
 
 ### Test
@@ -409,6 +405,45 @@ If you notice a problem after switching your content to the production network:
 Roll back the DNS change to point your website or application back to your servers.
 Report the problem to ​Akamai​.
 This helps you and ​Akamai​ identify the problem in a controlled environment without affecting live end users.
+
+## Azure Front Door deployment via Github Workflow (Actions)
+
+### CARML
+Based on https://github.com/Azure/ResourceModules
+
+- We uploaded the needed carml module to the azure container registry carml.azurecr.io.
+- We do reference the module inside the fdpipeline/main2.bicep file as follow: 'br:carml.azurecr.io/bicep/modules/cdn.profile:1.0.0' 
+- The module is cached on our local machine via the Bicep [restore](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/bicep-cli#restore) feature. 
+- Access to the azure container registry is granted via the [currently logged](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/bicep-config-modules#configure-profiles-and-credentials) in user.
+
+~~~ bash
+cd fdpipeline
+location=germanywestcentral
+prefix=cptdazfd
+az group delete -n ${prefix}-rg --yes
+az deployment sub create -n $prefix -l $location --template-file main.bicep -p serviceShort=t1 namePrefix=$prefix resourceGroupName=$prefix
+
+# list storage accounts under our resource group
+az storage account list -g ${prefix}-rg --query [].name -o tsv
+# upload local file to storage account
+az storage blob upload --account-name $prefix -c $prefix -f test.txt -n test.txt
+
+# Get details about our AFD profile
+afdProfileName=$(az afd profile list -g ${prefix}-rg --query [].name -o tsv)
+az afd profile show --profile-name $afdProfileName -g ${prefix}-rg
+az afd origin-group list --profile-name $afdProfileName -g ${prefix}-rg
+# retrieve afd endpoint hostname which contains the string "blob"
+afdEndpointBlob=$(az afd endpoint list -g ${prefix}-rg --profile-name $afdProfileName --query "[?contains(hostName, 'blob')].hostName" -o tsv)
+echo $afdEndpointBlob
+# retrieve AFD custom domains
+curl -v https://$afdEndpointBlob/$prefix/test.txt # expect 200 ok
+curl -v -H"X-Azure-DebugInfo: 1" https://$afdEndpointBlob/$prefix/test.txt # expect 200 ok
+# retrieve azure front door logs based on request id
+az monitor activity-log list --correlation-id e47149c2-701e-00d5-34dd-4e67a5000000 -o table
+~~~
+
+### Azure Deployment Framework
+Based on https://github.com/brwilkinson/AzureDeploymentFramework.git
 
 ## MISC
 
