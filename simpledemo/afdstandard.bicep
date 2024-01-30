@@ -1,7 +1,6 @@
 targetScope = 'resourceGroup'
 
 param originFQDN string
-param endpointFQDN string
 
 resource afdProfile1 'Microsoft.Cdn/profiles@2022-11-01-preview' = {
   name: 'afdProfile1'
