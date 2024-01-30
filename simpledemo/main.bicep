@@ -9,7 +9,7 @@ resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
   location: deployment().location
 }
 
-module afdStandard 'afdstandard.bicep' = {
+module afdStandard 'afdStandard.bicep' = {
   scope: resourceGroup(rgName)
   name: 'afdStandard'
   params: {
@@ -33,7 +33,7 @@ module afdDomainValidation 'afdDomainValidation.bicep' = {
   ]
 }
 
-module afdCNAME 'afdCNAME.bicep' = {
+module afdCNAME 'afdCname.bicep' = {
   scope: resourceGroup('cptdomains')
   name: 'afdCNAME'
   params: {
@@ -44,4 +44,9 @@ module afdCNAME 'afdCNAME.bicep' = {
   dependsOn: [
     afdStandard
   ]
+}
+
+module afdWaf 'afdWafStandard.bicep' = {
+  scope: resourceGroup(rgName)
+  name: 'afdWaf'
 }

@@ -2,6 +2,7 @@ targetScope = 'resourceGroup'
 
 param originFQDN string
 
+// Maximum profiles per subscription	500
 resource afdProfile1 'Microsoft.Cdn/profiles@2022-11-01-preview' = {
   name: 'afdProfile1'
   location: 'Global'
@@ -13,6 +14,7 @@ resource afdProfile1 'Microsoft.Cdn/profiles@2022-11-01-preview' = {
   }
 }
 
+// Maximum endpoint per profile	10
 resource afdEndpointBlob 'Microsoft.Cdn/profiles/afdendpoints@2022-11-01-preview' = {
   parent: afdProfile1
   name: 'afdEndpointBlob'
@@ -23,6 +25,7 @@ resource afdEndpointBlob 'Microsoft.Cdn/profiles/afdendpoints@2022-11-01-preview
   }
 }
 
+// Maximum custom domain per profile	100
 resource afdCustomDomainBlob 'Microsoft.Cdn/profiles/customdomains@2022-11-01-preview' = {
   parent: afdProfile1
   name: 'afdCustomDomainBlob'
@@ -35,6 +38,7 @@ resource afdCustomDomainBlob 'Microsoft.Cdn/profiles/customdomains@2022-11-01-pr
   }
 }
 
+// Maximum origin groups per profile	100
 resource afdOriginGroupBlob 'Microsoft.Cdn/profiles/origingroups@2022-11-01-preview' = {
   parent: afdProfile1
   name: 'afdOriginGroupBlob'
@@ -49,11 +53,8 @@ resource afdOriginGroupBlob 'Microsoft.Cdn/profiles/origingroups@2022-11-01-prev
   }
 }
 
-resource afdRuleSet1 'Microsoft.Cdn/profiles/rulesets@2022-11-01-preview' = {
-  parent: afdProfile1
-  name: 'afdRuleSet1'
-}
-
+// Maximum origins per origin group	50
+// Maximum origins per profile	100
 resource afdOriginBlob 'Microsoft.Cdn/profiles/origingroups/origins@2022-11-01-preview' = {
   parent: afdOriginGroupBlob
   name: 'afdOriginBlob'
@@ -69,7 +70,12 @@ resource afdOriginBlob 'Microsoft.Cdn/profiles/origingroups/origins@2022-11-01-p
   }
 }
 
-resource afdRuleHttp2Https 'Microsoft.Cdn/profiles/rulesets/rules@2022-11-01-preview' = {
+resource afdRuleSet1 'Microsoft.Cdn/profiles/rulesets@2022-11-01-preview' = {
+  parent: afdProfile1
+  name: 'afdRuleSet1'
+}
+
+resource afdRule1 'Microsoft.Cdn/profiles/rulesets/rules@2022-11-01-preview' = {
   parent: afdRuleSet1
   name: 'afdRule1'
   properties: {
