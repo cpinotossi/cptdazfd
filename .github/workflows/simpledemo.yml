@@ -1,0 +1,44 @@
+name: frontdoor pipeline
+
+on:
+  workflow_dispatch:
+    branches:
+      - "main"
+    paths:
+      - 'simpledemo/**'
+
+env:
+  Location: ${{ vars.LOCATION_GWC }}
+  runNumber: ${{ github.run_number }}
+
+permissions:
+      id-token: write # if this is not setup we will not be able to use the az login federation feature
+      contents: read
+
+jobs:
+  bicep_tenant_deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+            client-id: ${{ secrets.AZURE_CLIENT_ID }}
+            tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+            subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy Front Door
+        id: create_fd
+        uses: azure/arm-deploy@v1
+        with:
+          scope: subscription
+          subscriptionId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          region: ${{ env.Location }}
+          template: simpledemo/main.bicep
+          # parameters: simpledemo/main.bicepparam
+          deploymentName: create_fd-${{ env.runNumber }}
+          failOnStdErr: false
