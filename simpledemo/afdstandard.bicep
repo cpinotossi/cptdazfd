@@ -95,7 +95,7 @@ resource afdRuleHttp2Https 'Microsoft.Cdn/profiles/rulesets/rules@2022-11-01-pre
           typeName: 'DeliveryRuleHeaderActionParameters'
           headerAction: 'Append'
           headerName: 'test'
-          value: 'ok'
+          value: 'ok-1'
         }
       }
     ]
