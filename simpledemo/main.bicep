@@ -1,7 +1,6 @@
 targetScope = 'subscription'
 
 var originFQDN = 'cptdazfd.blob.core.windows.net'
-var endpointFQDN = 'blob.cptdev.com'
 var topLevelDomain = 'cptdev.com'
 var rgName = 'cptdazfd2'
 
@@ -15,7 +14,6 @@ module afdStandard 'afdstandard.bicep' = {
   name: 'afdStandard'
   params: {
     originFQDN: originFQDN
-    endpointFQDN: endpointFQDN
   }
   dependsOn: [
     rg
