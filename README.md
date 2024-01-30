@@ -4,14 +4,16 @@
 
 ~~~bash
 # Define some env variables
+cd simpledemo
 prefix=cptdazfd2
 location=germanywestcentral
 myip=$(curl ifconfig.io) # Just in case we like to whitelist our own ip.
 currentUserObjectId=$(az ad signed-in-user show --query id -o tsv)
 # az group delete -n $prefix --yes
-az group create -n $prefix -l $location
 # Create base components
-az deployment sub create -n ${prefix}-base -l $location --template-file main.bicep
+az deployment sub create -n ${prefix}-base -l $location --template-file main.bicep -w
+# Retrieve the validation token of our custom domain
+az afd custom-domain show --custom-domain-name afdCustomDomainBlob -g $prefix --profile-name afdProfile1 --query validationProperties.validationToken -o tsv
 ~~~
 
 Test

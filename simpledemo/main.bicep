@@ -49,4 +49,7 @@ module afdCNAME 'afdCname.bicep' = {
 module afdWaf 'afdWafStandard.bicep' = {
   scope: resourceGroup(rgName)
   name: 'afdWaf'
+  dependsOn: [
+    afdStandard
+  ]
 }
