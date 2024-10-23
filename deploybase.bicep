@@ -6,7 +6,7 @@ var username = 'chpinoto'
 var password = 'demo!pass123'
 param prefix string
 param myobjectid string
-param myip string
+// param myip string
 var plip = '10.0.0.6'
 var lbip = '10.0.0.5'
 var vmip = '10.0.0.4'
@@ -33,13 +33,14 @@ module vmmodule 'azbicep/bicep/vm.bicep' = {
     myObjectId: myobjectid
     privateip: vmip
     imageRef: 'linux'
+    loadBalancerBackendId: lbmodule.outputs.beid
   }
   dependsOn:[
-    vnetmodule
+    lbmodule
   ]
 }
 
-module lb 'azbicep/bicep/slb.bicep' = {
+module lbmodule 'azbicep/bicep/slb.bicep' = {
   name: 'lbdeploy'
   params:{
     location:location
@@ -49,18 +50,11 @@ module lb 'azbicep/bicep/slb.bicep' = {
     feport: 80
   }
   dependsOn:[
-    vmmodule
+    vnetmodule
   ]
 }
 
-module dnsModule 'azbicep/bicep/dns.bicep' = {
-  name: 'dnsDeploy'
-  params: {
-    prefix: prefix
-  }
-}
-
-resource plsvc 'Microsoft.Network/privateLinkServices@2020-11-01' = {
+resource plsvc 'Microsoft.Network/privateLinkServices@2024-01-01' = {
   name: prefix
   location: location
   properties: {
@@ -74,7 +68,7 @@ resource plsvc 'Microsoft.Network/privateLinkServices@2020-11-01' = {
     enableProxyProtocol: false
     loadBalancerFrontendIpConfigurations: [
       {
-        id: lb.outputs.fipid
+        id: lbmodule.outputs.feid
       }
     ]
     ipConfigurations: [
@@ -93,6 +87,6 @@ resource plsvc 'Microsoft.Network/privateLinkServices@2020-11-01' = {
     ]
   }
   dependsOn: [
-    lb
+    lbmodule
   ]
 }
