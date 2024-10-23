@@ -1,4 +1,4 @@
-targetScope='resourceGroup'
+targetScope = 'resourceGroup'
 
 //var parameters = json(loadTextContent('parameters.json'))
 param prefix string

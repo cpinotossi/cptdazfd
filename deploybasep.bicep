@@ -1,13 +1,12 @@
-targetScope = 'resourceGroup'
+targetScope='resourceGroup'
 
 //var parameters = json(loadTextContent('parameters.json'))
 param location string
-param username string
-@secure()
-param password string
+var username = 'chpinoto'
+var password = 'demo!pass123'
 param prefix string
 param myobjectid string
-// param myip string
+param myip string
 var plip = '10.0.0.6'
 var lbip = '10.0.0.5'
 var vmip = '10.0.0.4'
@@ -34,14 +33,13 @@ module vmmodule 'azbicep/bicep/vm.bicep' = {
     myObjectId: myobjectid
     privateip: vmip
     imageRef: 'linux'
-    loadBalancerBackendId: lbmodule.outputs.beid
   }
   dependsOn:[
-    lbmodule
+    vnetmodule
   ]
 }
 
-module lbmodule 'azbicep/bicep/slb.bicep' = {
+module lb 'azbicep/bicep/slb.bicep' = {
   name: 'lbdeploy'
   params:{
     location:location
@@ -51,16 +49,20 @@ module lbmodule 'azbicep/bicep/slb.bicep' = {
     feport: 80
   }
   dependsOn:[
-    vnetmodule
+    vmmodule
   ]
 }
 
-resource plsvc 'Microsoft.Network/privateLinkServices@2024-01-01' = {
+module dnsModule 'azbicep/bicep/dns.bicep' = {
+  name: 'dnsDeploy'
+  params: {
+    prefix: prefix
+  }
+}
+
+resource plsvc 'Microsoft.Network/privateLinkServices@2020-11-01' = {
   name: prefix
   location: location
-  sku: {
-    name: 'Standard'
-  }
   properties: {
     fqdns: []
     visibility: {
@@ -72,27 +74,25 @@ resource plsvc 'Microsoft.Network/privateLinkServices@2024-01-01' = {
     enableProxyProtocol: false
     loadBalancerFrontendIpConfigurations: [
       {
-        id: lbmodule.outputs.feid
+        id: lb.outputs.fipid
       }
     ]
     ipConfigurations: [
       {
-        name: '${prefix}lin'
+        name: prefix
         properties: {
+          privateIPAllocationMethod: 'Static'
+          privateIPAddress: plip
           subnet: {
-            id: '${vnet.id}/subnets/${prefix}'
+            id: vnetmodule.outputs.subnetid
           }
           primary: true
           privateIPAddressVersion: 'IPv4'
-          publicIPAddress: {
-            id: pubipvm.id
-          }
-          privateIPAddress: vmip
         }
       }
     ]
   }
   dependsOn: [
-    lbmodule
+    lb
   ]
 }
