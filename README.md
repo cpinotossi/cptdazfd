@@ -16,76 +16,186 @@ PrivateLinkService: 10.0.0.6
 
 ### Setup Env:
 
-~~~ bash
-sudo hwclock -s
-sudo ntpdate time.windows.com
+~~~powershell
 # Define some env variables
-prefix=cptdazfd
-location=eastus
-myip=$(curl ifconfig.io) # Just in case we like to whitelist our own ip.
-myobjectid=$(az ad user list --query '[?displayName==`ga`].id' -o tsv) 
+$prefix="cptdazfd"
+$location="germanywestcentral"
+$myIp=(Invoke-RestMethod -Uri "http://ipv4.icanhazip.com").Trim()
+# myobjectid=$(az ad user list --query '[?displayName==`ga`].id' -o tsv) 
+$myObjectId=az ad signed-in-user show --query id -o tsv
 
 # az group delete -n $prefix --yes
 az group create -n $prefix -l $location
+# Create App Domain
+# az deployment group create -n ${prefix}-domain -g $prefix --mode incremental --template-file ./azbicep/bicep/appDomain.bicep -p prefix="cptdazfd2"
+
 # Create base components
-az deployment group create -n ${prefix}-base -g $prefix --mode incremental --template-file deploybase.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
-# Add vm to lb backend pool
-az network nic ip-config address-pool add --address-pool $prefix --ip-config-name $prefix --nic-name $prefix -g $prefix --lb-name $prefix
+az deployment group create -n ${prefix}-base -g $prefix --mode incremental --template-file deploybase.bicep -p prefix=$prefix myobjectid=$myObjectId location=$location
+
+
 # Add AFD
-az deployment group create -n ${prefix}-afd -g $prefix --mode incremental --template-file deployafd.bicep -p prefix=$prefix myobjectid=$myobjectid location=$location myip=$myip
-## Approve Private Link Service
-plsid=$(az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query sharedPrivateLinkResource.privateLink.id -o tsv)
-pecid=$(az network private-endpoint-connection list  --id $plsid --query [0].id -o tsv)
+az deployment group create -n ${prefix}-afd -g $prefix --mode incremental --template-file deployafd.bicep -p prefix=$prefix
+# You will need to approve the the Domain Registration for the new domain cptdazfd.org either via the Azure Portal or via the Rest API   "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.DomainRegistration/domains/$domainName?api-version=2023-12-01"
+
+
+# Approve Private Link Service
+$plsid=az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query sharedPrivateLinkResource.privateLink.id -o tsv
+$pecid=az network private-endpoint-connection list --id $plsid --query [0].id -o tsv
 az network private-endpoint-connection approve -d $prefix --id $pecid
 ~~~
+
+### Approve Domain Registration (NOT WORKING)
+
+To finsh the setup with our own Domain we will need to approve the domain registration via the Powershell script.
+
+~~~powershell
+# Define variables
+$subscriptionId = "your-subscription-id"
+$resourceGroupName = "your-resource-group"
+$domainName = "cptdazfd2"
+$token = (Get-AzAccessToken).Token
+
+# Define the request body
+$requestBody = @{
+    location = "global"
+    properties = @{
+        privacy = $true
+        autoRenew = $true
+        contactAdmin = @{
+            email = "admin@myedge.org"
+            nameFirst = "Admin"
+            nameLast = "MyEdge"
+            phone = "+49.1234567890"
+        }
+        contactBilling = @{
+            email = "admin@myedge.org"
+            nameFirst = "Admin"
+            nameLast = "MyEdge"
+            phone = "+49.1234567890"
+        }
+        contactRegistrant = @{
+            email = "admin@myedge.org"
+            nameFirst = "Admin"
+            nameLast = "MyEdge"
+            phone = "+49.1234567890"
+        }
+        contactTech = @{
+            email = "admin@myedge.org"
+            nameFirst = "Admin"
+            nameLast = "MyEdge"
+            phone = "+49.1234567890"
+        }
+    }
+} | ConvertTo-Json -Depth 10
+
+# Make the API request
+$subid=az account show --query id -o tsv
+$domainName="${prefix}2.org"
+az rest --method put --url "https://management.azure.com/subscriptions/$subid/resourceGroups/$prefix/providers/Microsoft.DomainRegistration/domains/$domainName" --url-parameters "api-version=2023-12-01" -b $requestBody --headers "ContentType"="application/json" --verbose
+az rest --method put --url "https://management.azure.com/subscriptions/$subid/resourceGroups/$prefix/providers/Microsoft.DomainRegistration/domains/$domainName" --url-parameters "api-version=2023-12-01" -b "{}" --headers "ContentType"="application/json" --verbose
+
+$response = Invoke-RestMethod -Method Put -Uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/providers/Microsoft.DomainRegistration/domains/$domainName?api-version=2023-12-01" -Headers @{ Authorization = "Bearer $token" } -Body $requestBody -ContentType "application/json"
+
+# Output the response
+$response
+~~~
+
+### Validate Custom Domain for Azure Frontdoor
+
+~~~powershell
+# Define variables
+$prefix="cptdazfd"
+customDomainName="www.${prefix}.org" # Replace with your custom domain name
+
+# Lookup if our custom domain is already validated
+az afd custom-domain list -g $prefix --profile-name $prefix
+# Get the validation token
+$validationToken=az afd custom-domain list -g $prefix --profile-name $prefix --query "[?domainValidationState=='Pending']| [0].validationProperties.validationToken" -o tsv
+# List all TXT records for the custom domain
+az network dns record-set txt list -g $prefix -z "${prefix}.org"
+# create new txt record with the validation token
+az network dns record-set txt add-record -g $prefix -z "${prefix}.org" -n "_dnsauth.www.${prefix}.org" -v $validationToken
+az network dns record-set txt list -g $prefix -z "${prefix}.org"
+az afd custom-domain show -g $prefix --profile-name $prefix --custom-domain-name "www-cptdazfd-org"
+"www-${prefix}-org"
+az afd custom-domain show -g $prefix --profile-name $prefix --custom-domain-name "cptdazfd-cfgzcvcdh9bzbdfv.b01.azurefd.net"
+
+
+ --query "validationProperties.validationToken" -o tsv)
+
+# Output the validation token
+echo "Validation Token: $validationToken"
+~~~
+
 
 ### Verify setup
 
 ~~~ bash
-az vm list-ip-addresses -g $prefix -n $prefix -o table
+az vm list-ip-addresses -g $prefix -n $prefix -o tsv # expect 10.0.0.4 for our vm
 # proof we are using only privat ips with our lb
-az network lb show -n $prefix -g $prefix --query frontendIPConfigurations[].privateIPAddress -o table # expect 10.0.0.5
+az network lb show -n $prefix -g $prefix --query frontendIPConfigurations[].privateIPAddress -o tsv # expect 10.0.0.5
 # what is the ip of our private link service?
-az network private-link-service show -n $prefix -g $prefix --query ipConfigurations[].privateIpAddress # expect 10.0.0.6
+az network private-link-service show -n $prefix -g $prefix --query ipConfigurations[].privateIPAddress -o tsv # expect 10.0.0.6
 # Get details about our AFD profile
-az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query "{hostName:hostName, originHostHeader:originHostHeader, privateLink:sharedPrivateLinkResource.privateLink.id}" | sed -e "s#subscriptions\/.*\/resourceGroups#rg#"
+az afd origin show --origin-group-name $prefix --origin-name $prefix --profile-name $prefix -g $prefix --query "{hostName:hostName, originHostHeader:originHostHeader, privateLink:sharedPrivateLinkResource.privateLink.id}"
+
+# Show effective routes of nic
+az network nic show-effective-route-table -g $prefix -n $prefix -o table
+# Show effective security rules of nic
+az network nic list-effective-nsg -g $prefix -n $prefix -o table
+
 ~~~
 
 ### Setup Web Server at VM
 
 ~~~ bash
 # ssh into vm
-vmid=$(az vm show -g $prefix -n $prefix --query id -o tsv)
+$vmid=az vm show -g $prefix -n $prefix --query id -o tsv
 az network bastion ssh -n $prefix -g $prefix --target-resource-id $vmid --auth-type AAD
+az network bastion ssh -n $prefix -g $prefix --target-resource-id $vmid --auth-type password --username chpinoto
 # Create web server
 mkdir www
 cd www
 echo "hello world" > index.html
 echo "hello azure" > azure.html
+netstat -tuln | grep ':9000' # check if port 9000 is already in use
 python -m SimpleHTTPServer 9000
 python -m SimpleHTTPServer 9000 &
 ~~~
 
 ### Test
 
-Open new terminal
+Open new terminal (CTL+SHIFT+ö at VSCode with German Keyboard) and test the setup as follows:
 
 ~~~ bash
-prefix=cptdazfd #you need to set the ENV var again
+$prefix="cptdazfd" #you need to set the ENV var again
 
 # retrieve AFD FQDN
-fdfqdn=$(az afd endpoint show --endpoint-name $prefix --profile-name $prefix -g $prefix --query hostName -o tsv)
-echo $fdfqdn
+$fdfqdn=az afd endpoint show --endpoint-name $prefix --profile-name $prefix -g $prefix --query hostName -o tsv # expect <Your prefix>-<Random>.b01.azurefd.net
 # retrieve AFD custom domains
-fdcd0=$(az afd custom-domain list -g $prefix --profile-name $prefix --query [0].hostName -o tsv)
-echo $fdcd0
-fdcd1=$(az afd custom-domain list -g $prefix --profile-name $prefix --query [1].hostName -o tsv)
-echo $fdcd1
+$fdcd0=az afd custom-domain list -g $prefix --profile-name $prefix --query [0].hostName -o tsv # expect www.<your prefix>.org
+$fdcd1=az afd custom-domain list -g $prefix --profile-name $prefix --query [1].hostName -o tsv
+
+curl -v -k http://$fdfqdn/index.html # expect 200 ok and hello world
+curl -v -k https://$fdfqdn/index.html # expect 200 ok and hello world
+
+curl -v -k http://$fdcd0/index.html # expect 200 ok and hello world
+curl -v -k https://$fdfqdn/index.html # expect 200 ok and hello world
+
+
+
+
+curl -v -k http://$fdcd0/index.html # expect 200 ok
+curl -v -k http://$fdcd0/azure.html # expect 200 ok
 
 curl -v -k https://$fdfqdn/index.html # expect 200 ok
 curl -v -k https://$fdfqdn/azure.html # expect 200 ok
-curl -v -k https://$fdcd0/azure.html # expect 200 ok
+
 curl -v -H"X-Azure-DebugInfo: 1" https://$fdcd0/azure.html # expect 200 ok
+
+curl -v -H"X-Azure-DebugInfo: 1" https://cptdaztest-d9a5ahg2c3bffufd.b01.azurefd.net/azure.html # expect 200 ok
+curl -v  https://cptdaztest-d9a5ahg2c3bffufd.b01.azurefd.net/azure.html # expect 200 ok
+
 
 # retrieve AFD Edge PoP IP
 fdip=$(dig $fdfqdn +short | tail -n1)
@@ -188,6 +298,12 @@ stateDiagram-v2
     path=red --> Backend=Red
 ~~~
 
+
+yelow.de waf test
+~~~pwsh
+curl -H"user-agent: megaindex.ru" -H"X-Azure-DebugInfo: 1" -v https://www.yello.de/erik2024.html -o output.txt
+~~~
+
 Test are done via curl. Because we use azure front door all test can be done via the public internet.
 
 ~~~ text
@@ -244,6 +360,48 @@ https://github.com/Azure/azure-quickstart-templates/blob/master/quickstarts/micr
 
 
 ## MISC
+
+## Frontdoor Kusto Queries
+
+Get HITs
+~~~Kusto
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.CDN" and Category == "FrontDoorAccessLog"
+| summarize Count = count() by cacheStatus_s
+~~~
+
+Top 10 URLs bei volume
+
+~~~Kusto
+//  [Azure Front Door Standard/Premium] Top 10 URL request count  
+//  Show egress from AFD edge by URL. Change bins resolution from 1hr to 5m to get real time results. 
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.CDN" and Category == "FrontDoorAccessLog"
+| summarize ResponseBytes = sum(toint(responseBytes_s)) by requestUri_s
+~~~
+
+Top 10 URLs bei hits
+
+~~~Kusto
+//  [Azure Front Door Standard/Premium] Top 10 URL request count  
+//  Show egress from AFD edge by URL. Change bins resolution from 1hr to 5m to get real time results. 
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.CDN" and Category == "FrontDoorAccessLog"
+| summarize ResponseBytes = sum(count() by cacheStatus_s) by requestUri_s
+~~~
+
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.CDN" and Category == "FrontDoorAccessLog"
+| extend ParsedUrl = parseurl(requestUri_s)
+| summarize RequestCount = count() by Extension = extract(@"\.([a-zA-Z0-9]+)$", 1, tostring(ParsedUrl.Path))
+| order by RequestCount desc
+
+### Azure CLI 
+
+~~~powershell
+# Add vm to lb backend pool
+az network nic ip-config address-pool add --address-pool $prefix --ip-config-name $prefix --nic-name $prefix -g $prefix --lb-name $prefix
+~~~
 
 ### curl
 
