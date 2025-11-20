@@ -17,12 +17,6 @@ $frontDoorName = terraform output -raw frontdoor_profile_name
 $storageAccountName = terraform output -raw storage_account_name
 $logAnalyticsName = terraform output -raw log_analytics_workspace_name
 
-# Alternative: Get values from Azure CLI
-# $sourceResourceGroup = az group list --subscription $sourceSubscription --query "[0].name" -o tsv
-# $frontDoorName = az cdn profile list --subscription $sourceSubscription -g $sourceResourceGroup --query "[0].name" -o tsv
-# $storageAccountName = az storage account list --subscription $sourceSubscription -g $sourceResourceGroup --query "[0].name" -o tsv
-# $logAnalyticsName = az monitor log-analytics workspace list --subscription $sourceSubscription -g $sourceResourceGroup --query "[0].name" -o tsv
-
 # Set destination resource group name
 $destinationResourceGroup = "cptdazafdmove2"  # Change this to your desired destination name
 
