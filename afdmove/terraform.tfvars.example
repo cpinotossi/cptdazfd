@@ -1,0 +1,16 @@
+# Example Terraform variables file
+# Copy this file to terraform.tfvars and fill in your actual values
+# IMPORTANT: terraform.tfvars is excluded from git via .gitignore
+
+# Azure Service Principal Authentication
+subscription_id = "00000000-0000-0000-0000-000000000000"  # Your Azure subscription ID
+client_id       = "00000000-0000-0000-0000-000000000000"  # Service principal application (client) ID
+client_secret   = "your-client-secret-value-here"          # Service principal client secret
+tenant_id       = "00000000-0000-0000-0000-000000000000"  # Azure AD tenant ID
+
+# Service Principal Object ID (for RBAC assignments)
+service_principal_object_id = "00000000-0000-0000-0000-000000000000"  # Service principal object ID
+
+# Resource Configuration (optional - defaults are provided)
+# prefix   = "cptdazafdmove"  # Prefix for all resource names
+# location = "westeurope"     # Azure region for resources
