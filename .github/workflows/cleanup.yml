@@ -1,0 +1,35 @@
+name: cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "delete" to remove the resource group and the DNS records'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  destroy:
+    if: inputs.confirm == 'delete'
+    runs-on: ubuntu-latest
+    environment: cleanup
+    env:
+      AZURE_DNS_SUBSCRIPTION_ID: ${{ vars.AZURE_DNS_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Remove DNS records
+        run: |
+          for L in hello media upload uploadp; do
+            az network dns record-set cname delete --subscription "$AZURE_DNS_SUBSCRIPTION_ID" -g domains -z cptdaz.org -n $L -y || true
+            az network dns record-set txt delete --subscription "$AZURE_DNS_SUBSCRIPTION_ID" -g domains -z cptdaz.org -n _dnsauth.$L -y || true
+          done
+      - name: Delete resource group content
+        run: az group delete -n rg-cptmtls -y --no-wait

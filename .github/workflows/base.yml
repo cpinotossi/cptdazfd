@@ -1,0 +1,35 @@
+name: base
+
+on:
+  workflow_dispatch:
+    inputs:
+      seedVersion:
+        description: 'Change to re-run the storage seeding script on the VM'
+        default: 'v1'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: rg-cptmtls
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: base
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Deploy base (network, VM, storage, key vault, AFD profiles, diagnostics)
+        run: |
+          az deployment group create -g "$RESOURCE_GROUP" -n base \
+            --template-file projects/mtlsupload/base/main.bicep \
+            --parameters userObjectId='${{ vars.USER_OBJECT_ID }}' \
+                         adminSshPublicKey='${{ vars.VM_SSH_PUBLIC_KEY }}' \
+                         caCertPem="$(cat projects/mtlsupload/pki/ca.crt)" \
+                         seedVersion='${{ inputs.seedVersion || 'v1' }}'

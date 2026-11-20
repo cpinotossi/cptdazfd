@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Source once at the start of upload-ja4.ipynb. This file contains no credentials.
+export JA4_REPO_ROOT
+JA4_REPO_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+export JA4_SUB=09808f31-065f-4231-914d-776c2d6bbe34
+export JA4_RG=rg-cptmtls
+export JA4_PROFILE=afd-cptmtls-upload
+export JA4_ENDPOINT=cptmtls-uploadp
+export JA4_HOST=uploadp.cptdaz.org
+export JA4_STORAGE=stcptmtlsuploadpizhwq
+export JA4_CONTAINER=upload
+export JA4_LAW=law-cptmtls
+export JA4_CERT="$HOME/mtls-pki/client-valid.crt"
+export JA4_KEY="$HOME/mtls-pki/client-valid.key"
+export JA4_BAD_CERT="$HOME/mtls-pki/client-invalid.crt"
+export JA4_BAD_KEY="$HOME/mtls-pki/client-invalid.key"
+export JA4_CIPHERS=ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES128-GCM-SHA256
+export JA4_AFD_API=2026-07-01
+export JA4_WAF_API=2026-04-01
+export JA4_PROPAGATION_SECONDS=1560
+export JA4_LOG_SECONDS=300
+export JA4_RUN_SUFFIX="$(date -u +%Y%m%d%H%M%S)-$$"
+export JA4_RUN_ID="ja4-$JA4_RUN_SUFFIX"
+export JA4_WAF="wafcptmtlsja4${JA4_RUN_SUFFIX//-/}"
+export JA4_SECURITY="ja4-$JA4_RUN_SUFFIX"
+export JA4_DEPLOYMENT="afd-upload-$JA4_RUN_ID"
+export JA4_DIR="/tmp/$JA4_RUN_ID"
+export JA4_FILE="$JA4_DIR/payload.json"
+export JA4_PREFIX="ja4/$JA4_RUN_ID"
+export JA4_OUTSIDE_BLOB="$JA4_RUN_ID-outside.json"
+export JA4_URL="https://$JA4_HOST/$JA4_CONTAINER/$JA4_PREFIX"
+export JA4_STORAGE_URL="https://$JA4_STORAGE.blob.core.windows.net/$JA4_CONTAINER"
+export JA4_TEMPLATE="$JA4_REPO_ROOT/projects/mtlsupload/afd/upload-ja4.bicep"
+export JA4_LAW_RESOURCE_ID="/subscriptions/$JA4_SUB/resourceGroups/$JA4_RG/providers/Microsoft.OperationalInsights/workspaces/$JA4_LAW"
+export JA4_ARM="https://management.azure.com/subscriptions/$JA4_SUB/resourceGroups/$JA4_RG/providers"
+export JA4_DOMAIN_ID="/subscriptions/$JA4_SUB/resourceGroups/$JA4_RG/providers/Microsoft.Cdn/profiles/$JA4_PROFILE/customDomains/${JA4_HOST//./-}"
+export JA4_WAF_ID="/subscriptions/$JA4_SUB/resourceGroups/$JA4_RG/providers/Microsoft.Network/frontdoorWebApplicationFirewallPolicies/$JA4_WAF"
+export JA4_SECURITY_ID="/subscriptions/$JA4_SUB/resourceGroups/$JA4_RG/providers/Microsoft.Cdn/profiles/$JA4_PROFILE/securityPolicies/$JA4_SECURITY"
+export AZCOPY_AUTO_LOGIN_TYPE=AZCLI
+export AZCOPY_LOG_LOCATION="$JA4_DIR/azcopy-logs"
+export AZCOPY_JOB_PLAN_LOCATION="$JA4_DIR/azcopy-plans"
+export PAGER=cat

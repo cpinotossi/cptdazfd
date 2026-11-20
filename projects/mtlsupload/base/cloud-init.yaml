@@ -1,0 +1,59 @@
+#cloud-config
+package_update: true
+packages:
+  - nodejs
+  - curl
+write_files:
+  - path: /opt/app/server.js
+    permissions: '0644'
+    content: |
+      const http = require('http');
+      const fs = require('fs');
+      const os = require('os');
+      const html = fs.readFileSync('/opt/app/index.html', 'utf8').replace('__HOSTNAME__', os.hostname());
+      http.createServer((req, res) => {
+        const path = req.url.split('?')[0];
+        if (path === '/health') {
+          res.writeHead(200);
+          return res.end('ok');
+        }
+        if (path === '/' || path === '/index.html') {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+          return res.end(html);
+        }
+        res.writeHead(404);
+        res.end('not found');
+      }).listen(8080);
+  - path: /opt/app/index.html
+    permissions: '0644'
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <title>Hello from the VM</title>
+        <link rel="stylesheet" href="https://__MEDIA_HOST__/style.css">
+      </head>
+      <body>
+        <h1>Hello from __HOSTNAME__</h1>
+        <p>Served by Node.js behind Azure Front Door (Private Link). The stylesheet comes from https://__MEDIA_HOST__/style.css.</p>
+      </body>
+      </html>
+  - path: /etc/systemd/system/hello-node.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Hello Node.js server
+      After=network-online.target
+
+      [Service]
+      DynamicUser=yes
+      ExecStart=/usr/bin/node /opt/app/server.js
+      Restart=always
+
+      [Install]
+      WantedBy=multi-user.target
+runcmd:
+  - systemctl daemon-reload
+  - systemctl enable --now hello-node
+  - [bash, -c, 'for i in $(seq 1 20); do curl -sL https://aka.ms/InstallAzureCLIDeb | bash && break; sleep 30; done']

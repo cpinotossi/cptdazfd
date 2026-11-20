@@ -1,0 +1,51 @@
+name: afd-upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RESOURCE_GROUP: rg-cptmtls
+  AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  AZURE_DNS_SUBSCRIPTION_ID: ${{ vars.AZURE_DNS_SUBSCRIPTION_ID }}
+  ENDPOINT: cptmtls-upload
+  HOST_LABEL: upload
+  DNS_ZONE: cptdaz.org
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: afd-upload
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Read base outputs
+        run: |
+          O() { az deployment group show -g "$RESOURCE_GROUP" -n base --query "properties.outputs.$1.value" -o tsv; }
+          echo "PROFILE=$(O afdUploadName)" >> "$GITHUB_ENV"
+          echo "UPLOAD_STORAGE=$(O uploadStorage)" >> "$GITHUB_ENV"
+      - name: Pre-compute default hostname and create CNAME
+        run: |
+          TARGET=$(projects/mtlsupload/scripts/get-afd-hostname.sh "$ENDPOINT")
+          projects/mtlsupload/scripts/dns-record.sh cname "$HOST_LABEL" "$TARGET"
+      - name: Deploy AFD upload (mTLS)
+        run: |
+          az deployment group create -g "$RESOURCE_GROUP" -n afd-upload \
+            --template-file projects/mtlsupload/afd/upload.bicep \
+            --parameters profileName="$PROFILE" endpointName="$ENDPOINT" hostName="$HOST_LABEL.$DNS_ZONE" \
+                         uploadStorageName="$UPLOAD_STORAGE"
+          TOKEN=$(az deployment group show -g "$RESOURCE_GROUP" -n afd-upload --query properties.outputs.validationToken.value -o tsv)
+          projects/mtlsupload/scripts/dns-record.sh txt "_dnsauth.$HOST_LABEL" "$TOKEN"
+      - name: Approve private endpoint connections
+        run: |
+          projects/mtlsupload/scripts/approve-pe.sh \
+            "$(az storage account show -g "$RESOURCE_GROUP" -n "$UPLOAD_STORAGE" --query id -o tsv)"
+      - name: Wait for domain
+        run: projects/mtlsupload/scripts/wait-domain.sh "$RESOURCE_GROUP" "$PROFILE" "$HOST_LABEL-cptdaz-org"

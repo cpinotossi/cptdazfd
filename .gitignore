@@ -1,0 +1,26 @@
+node_modules/
+*.log
+vmlb.yaml
+output.txt
+
+# Local Terraform data and saved plans can contain credentials.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+tfplan
+tfplan.*
+*.tfplan
+
+# Private keys and local environment secrets.
+*.key
+*.pem
+*.pfx
+*.p12
+.env
+.env.*
+!.env.example
+
+# Python venv for notebooks
+.venv/
